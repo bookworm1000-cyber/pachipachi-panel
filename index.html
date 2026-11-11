@@ -35,7 +35,11 @@ body {
   background: var(--noise), var(--ground);
   color: var(--ink);
   font-family: var(--font-base);
-  padding-block: 20px 40px;
+  padding-block: 12px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  align-content: center;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   -webkit-tap-highlight-color: transparent;
@@ -44,6 +48,8 @@ body {
 }
 
 .panel {
+  --k: clamp(48px, calc((100vh - 590px) / 3), 78px);
+  --k: clamp(48px, calc((100dvh - 590px) / 3), 78px);
   position: relative;
   width: 100%;
   max-width: 440px;
@@ -79,7 +85,7 @@ body {
   padding: 4px 0 4px 14px;
   border-left: 7px solid var(--red);
   white-space: nowrap;
-  font-size: clamp(0.85rem, 4.4vw, 1.4rem);
+  font-size: clamp(0.85rem, min(4.4vw, 3vh), 1.4rem);
   font-weight: 900;
   line-height: 1.75;
   cursor: default;
@@ -128,7 +134,7 @@ body {
 .key {
   position: relative;
   width: 100%;
-  max-width: 78px;
+  max-width: var(--k);
   aspect-ratio: 1;
   padding: 0;
   border: 4px solid var(--ink);
@@ -168,7 +174,7 @@ body {
 }
 
 .display {
-  min-height: 3.2em;
+  min-height: 54px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -188,7 +194,7 @@ body {
 
 .cleared .display {
   color: #ff5a45;
-  font: 1.9rem var(--font-display);
+  font: 1.9rem/1.1 var(--font-display);
   letter-spacing: 0.3em;
   text-indent: 0.3em;
 }
@@ -215,18 +221,22 @@ body {
   touch-action: manipulation;
 }
 
-.submit { font-size: 1.15rem; letter-spacing: 0.3em; text-indent: 0.3em; padding: 13px; color: #ffffff; background: var(--red); }
-.reset { font-size: 0.95rem; letter-spacing: 0.15em; text-indent: 0.15em; padding: 11px; color: var(--ink); background: var(--paper); }
+.submit { height: 52px; padding: 0 8px; white-space: nowrap; font-size: 1.15rem; letter-spacing: 0.3em; text-indent: 0.3em; color: #ffffff; background: var(--red); }
+.reset { height: 52px; padding: 0 8px; white-space: nowrap; font-size: 0.95rem; letter-spacing: 0.15em; text-indent: 0.15em; color: var(--ink); background: var(--paper); }
+.cleared .submit { font-size: 1rem; letter-spacing: 0.12em; text-indent: 0.12em; }
 .submit:active,
 .reset:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
 
-.footer {
-  max-width: 440px;
-  margin: 26px auto 0;
+.reset.is-hidden { visibility: hidden; }
+
+.panel-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin-top: -6px;
+  padding-top: 12px;
+  border-top: 2px solid var(--ink);
   font-size: 0.75rem;
   font-weight: 700;
   color: #5a554c;
@@ -244,22 +254,39 @@ body {
 
 .mute[aria-pressed="false"] { color: var(--ink); background: var(--paper); }
 
+@media (max-width: 759px) and (max-height: 780px) {
+  .panel {
+    --k: clamp(44px, calc((100vh - 530px) / 3), 78px);
+    --k: clamp(44px, calc((100dvh - 530px) / 3), 78px);
+    gap: 14px;
+    padding-top: 66px;
+    padding-bottom: 20px;
+  }
+  .board { row-gap: 10px; }
+  .submit,
+  .reset { height: 46px; }
+}
+
 @media (min-width: 760px) {
   .panel {
+    --k: clamp(48px, calc((100vh - 440px) / 3), 78px);
+    --k: clamp(48px, calc((100dvh - 440px) / 3), 78px);
     max-width: 800px;
+    padding-top: 66px;
     grid-template-columns: minmax(0, 1fr) 260px;
     grid-template-areas:
       "plate plate"
       "board display"
-      "board controls";
-    grid-template-rows: auto 1fr auto;
+      "board controls"
+      "foot foot";
+    grid-template-rows: auto 1fr auto auto;
     column-gap: 40px;
   }
   .plate { grid-area: plate; }
-  .board { grid-area: board; }
+  .board { grid-area: board; row-gap: 12px; }
   .display { grid-area: display; }
   .controls { grid-area: controls; grid-template-columns: 1fr; }
-  .footer { max-width: 800px; }
+  .panel-foot { grid-area: foot; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -282,12 +309,11 @@ body {
     <button type="button" class="submit" id="submit">提出</button>
     <button type="button" class="reset" id="restart">最初から</button>
   </div>
+  <div class="panel-foot">
+    <span>効果音: 効果音ラボ</span>
+    <button type="button" class="mute" id="mute" aria-pressed="true">音 ON</button>
+  </div>
 </main>
-
-<footer class="footer">
-  <span>効果音: 効果音ラボ</span>
-  <button type="button" class="mute" id="mute" aria-pressed="true">音 ON</button>
-</footer>
 
 <script>
 const LAYOUT = "rrrbbbggg";
@@ -473,7 +499,7 @@ function render() {
   display.classList.toggle("fail", showFail && !notice);
   display.classList.toggle("notice", (Boolean(notice) || ready) && !cleared);
   submit.textContent = cleared ? "もう一度遊ぶ" : "提出";
-  reset.hidden = cleared;
+  reset.classList.toggle("is-hidden", cleared);
 }
 
 function restart() {

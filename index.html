@@ -168,19 +168,21 @@ body {
 .key:focus-visible,
 .submit:focus-visible,
 .reset:focus-visible,
+.undo:focus-visible,
 .mute:focus-visible {
   outline: 3px solid var(--red);
   outline-offset: 3px;
 }
 
 .display {
-  min-height: 54px;
+  height: 52px;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px 14px;
+  padding: 4px 14px;
   background: var(--ink);
-  font-size: clamp(0.8rem, 3.9vw, 1rem);
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1.5;
   text-align: center;
@@ -207,12 +209,13 @@ body {
 
 .controls {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
 .submit,
-.reset {
+.reset,
+.undo {
   font-family: var(--font-base);
   font-weight: 900;
   border: 3px solid var(--ink);
@@ -224,8 +227,13 @@ body {
 .submit { height: 52px; padding: 0 8px; white-space: nowrap; font-size: 1.15rem; letter-spacing: 0.3em; text-indent: 0.3em; color: #ffffff; background: var(--red); }
 .reset { height: 52px; padding: 0 8px; white-space: nowrap; font-size: 0.95rem; letter-spacing: 0.15em; text-indent: 0.15em; color: var(--ink); background: var(--paper); }
 .cleared .submit { font-size: 1rem; letter-spacing: 0.12em; text-indent: 0.12em; }
+.undo { height: 52px; padding: 0 8px; white-space: nowrap; font-size: 0.95rem; letter-spacing: 0.05em; text-indent: 0.05em; color: var(--ink); background: var(--paper); }
+.undo:disabled { opacity: 0.4; cursor: default; }
+.undo:disabled:active { transform: none; box-shadow: 4px 4px 0 var(--ink); }
+.undo.is-hidden { visibility: hidden; }
 .submit:active,
-.reset:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+.reset:active,
+.undo:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
 
 .reset.is-hidden { visibility: hidden; }
 
@@ -264,7 +272,9 @@ body {
   }
   .board { row-gap: 10px; }
   .submit,
-  .reset { height: 46px; }
+  .reset,
+  .undo,
+  .display { height: 46px; }
 }
 
 @media (min-width: 760px) {
@@ -279,14 +289,25 @@ body {
       "board display"
       "board controls"
       "foot foot";
-    grid-template-rows: auto 1fr auto auto;
+    grid-template-rows: auto auto 1fr auto;
     column-gap: 40px;
   }
   .plate { grid-area: plate; }
   .board { grid-area: board; row-gap: 12px; }
   .display { grid-area: display; }
-  .controls { grid-area: controls; grid-template-columns: 1fr; }
+  .controls { grid-area: controls; grid-template-columns: 1fr; align-self: start; }
   .panel-foot { grid-area: foot; }
+}
+
+@media (max-width: 379px) {
+  .cleared .submit { font-size: 0.88rem; letter-spacing: 0; text-indent: 0; }
+}
+
+@media (max-width: 359px) {
+  .submit { letter-spacing: 0.1em; text-indent: 0.1em; }
+  .cleared .submit { font-size: 0.82rem; letter-spacing: 0; text-indent: 0; }
+  .reset,
+  .undo { font-size: 0.82rem; letter-spacing: 0; text-indent: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -303,10 +324,11 @@ body {
   </div>
   <div class="board" id="board"></div>
   <div class="display" id="display" role="status">
-    <div><span id="message"></span><span class="message-tail" id="message-tail" hidden><span id="tail-text">せん</span><span class="period">。</span></span></div>
+    <div><span id="message"></span><span class="message-tail" id="message-tail" hidden><span id="tail-text">す</span><span class="period">。</span></span></div>
   </div>
   <div class="controls">
     <button type="button" class="submit" id="submit">提出</button>
+    <button type="button" class="undo" id="undo" disabled>一つ戻る</button>
     <button type="button" class="reset" id="restart">最初から</button>
   </div>
   <div class="panel-foot">
@@ -320,8 +342,8 @@ const LAYOUT = "rrrbbbggg";
 const COLORS = { r: ["R", "赤"], b: ["B", "青"], g: ["G", "緑"] };
 const IDLE = "提出を待っています";
 const SEALED = "もう押せません";
-const NOT_READY = "全て点灯させてから押すこと";
-const FAIL_HEAD = "すべてのボタンが押されていま";
+const NOT_READY = "先に全て点灯させること";
+const FAIL_HEAD = "押し忘れがありま";
 const STEP = {
   up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1],
   downRight: [1, 1], upLeft: [-1, -1]
@@ -389,7 +411,7 @@ addEventListener("pointerdown", () => {
   if (audioContext()) Object.values(SOUNDS).forEach(url => load(url).catch(() => {}));
 }, { once: true });
 
-let board, used, periodsLit, strict, cleared, failed, notice;
+let board, used, periodsLit, strict, cleared, failed, notice, history;
 
 const $ = id => document.getElementById(id);
 const panel = $("panel");
@@ -399,12 +421,17 @@ const messageTail = $("message-tail");
 const tailText = $("tail-text");
 const submit = $("submit");
 const reset = $("restart");
+const undo = $("undo");
 const periods = [...document.querySelectorAll(".period")];
 
 function neighbor(i, dir) {
   const row = Math.floor(i / 3) + STEP[dir][0];
   const col = i % 3 + STEP[dir][1];
   return row >= 0 && row < 3 && col >= 0 && col < 3 ? row * 3 + col : -1;
+}
+
+function snapshot() {
+  return { board: [...board], used: [...used], periodsLit: [...periodsLit], strict };
 }
 
 function flip(i) {
@@ -437,6 +464,7 @@ for (let i = 0; i < 9; i++) {
       }
       return;
     }
+    history.push(snapshot());
     const target = neighbor(i, TURNS[color][board[i] ? 1 : 0]);
     flip(i);
     flip(target);
@@ -469,6 +497,7 @@ periods.forEach((period, k) => {
       render();
       return;
     }
+    history.push(snapshot());
     strict = true;
     periodsLit[k] = true;
     flip(PERIOD_TARGETS[k]);
@@ -498,8 +527,10 @@ function render() {
   tailText.hidden = ready || Boolean(notice);
   display.classList.toggle("fail", showFail && !notice);
   display.classList.toggle("notice", (Boolean(notice) || ready) && !cleared);
-  submit.textContent = cleared ? "もう一度遊ぶ" : "提出";
+  submit.textContent = cleared ? "もう一度" : "提出";
   reset.classList.toggle("is-hidden", cleared);
+  undo.classList.toggle("is-hidden", cleared);
+  undo.disabled = cleared || history.length === 0;
 }
 
 function restart() {
@@ -510,6 +541,7 @@ function restart() {
   cleared = false;
   failed = false;
   notice = "";
+  history = [];
   render();
 }
 
@@ -529,6 +561,14 @@ submit.addEventListener("click", () => {
 });
 
 reset.addEventListener("click", restart);
+
+undo.addEventListener("click", () => {
+  if (cleared || history.length === 0) return;
+  ({ board, used, periodsLit, strict } = history.pop());
+  failed = false;
+  notice = "";
+  render();
+});
 
 restart();
 

@@ -244,6 +244,24 @@ body {
 
 .mute[aria-pressed="false"] { color: var(--ink); background: var(--paper); }
 
+@media (min-width: 760px) {
+  .panel {
+    max-width: 800px;
+    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-areas:
+      "plate plate"
+      "board display"
+      "board controls";
+    grid-template-rows: auto 1fr auto;
+    column-gap: 40px;
+  }
+  .plate { grid-area: plate; }
+  .board { grid-area: board; }
+  .display { grid-area: display; }
+  .controls { grid-area: controls; grid-template-columns: 1fr; }
+  .footer { max-width: 800px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

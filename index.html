@@ -345,7 +345,7 @@ addEventListener("pointerdown", () => {
   if (audioContext()) Object.values(SOUNDS).forEach(url => load(url).catch(() => {}));
 }, { once: true });
 
-let board, awake, used, periodsLit, strict, cleared, failed, notice;
+let board, used, periodsLit, strict, cleared, failed, notice;
 
 const $ = id => document.getElementById(id);
 const panel = $("panel");
@@ -393,11 +393,9 @@ for (let i = 0; i < 9; i++) {
       }
       return;
     }
-    const dir = TURNS[color][board[i] ? 1 : 0];
-    const target = neighbor(i, dir);
-    awake[Math.floor(i / 3)] = true;
+    const target = neighbor(i, TURNS[color][board[i] ? 1 : 0]);
     flip(i);
-    if (target >= 0 && awake[Math.floor(target / 3)]) flip(target);
+    flip(target);
     play("key", board[i] ? 1 : 0.85);
     if (strict) {
       used[i] = true;
@@ -462,7 +460,6 @@ function render() {
 
 function restart() {
   board = Array(9).fill(false);
-  awake = [false, false, false];
   used = Array(9).fill(false);
   periodsLit = [false, false, false, false];
   strict = false;

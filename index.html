@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="ボタンを全部光らせて提出する謎解き">
+<title>パチパチ制御盤</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Zen+Kaku+Gothic+New:wght@700;900&display=swap">
+<style>
+/* 紙に刷ったポスターのような操作盤: 見出し、指示プレート、3×3のボタン、黒帯の表示窓、提出 */
+:root {
+  color-scheme: light;
+  --paper: #f5f0e5;
+  --ground: #e6e0d2;
+  --ink: #111111;
+  --red: #e63322;
+  --muted: #9a9488;
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --red-on: #e63322;
+  --red-off: #f2cdc6;
+  --blue-on: #1d4ed8;
+  --blue-off: #cdd6f2;
+  --green-on: #0f9d58;
+  --green-off: #c6e6d3;
+  --font-base: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-display: "Anton", "Arial Narrow", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--noise), var(--ground);
+  color: var(--ink);
+  font-family: var(--font-base);
+  padding-block: 20px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.panel {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+  display: grid;
+  gap: 20px;
+  padding: 76px clamp(18px, 6vw, 30px) 26px;
+  background: var(--paper);
+  outline: 3px solid var(--ink);
+  box-shadow: 10px 10px 0 var(--ink);
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 64px;
+  height: 64px;
+  background: var(--red);
+}
+
+.panel::after {
+  content: "PANEL No.09";
+  position: absolute;
+  top: 18px;
+  left: clamp(18px, 6vw, 30px);
+  font: 2.2rem/1 var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+.plate {
+  padding: 4px 0 4px 14px;
+  border-left: 7px solid var(--red);
+  white-space: nowrap;
+  font-size: clamp(0.85rem, 4.4vw, 1.4rem);
+  font-weight: 900;
+  line-height: 1.75;
+  cursor: default;
+}
+
+.plate p { margin: 0; transition: color 0.5s; }
+
+.period {
+  position: relative;
+  display: inline-block;
+  transition: color 0.12s, text-shadow 0.12s;
+}
+
+.period::after {
+  content: "";
+  position: absolute;
+  inset: -6px -14px -6px -2px;
+}
+
+.period.lit,
+.period.flash {
+  color: var(--red);
+  text-shadow: 0 0 1px var(--red);
+}
+
+.cleared .plate p { color: var(--red); }
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px clamp(14px, 6vw, 30px);
+}
+
+.cell {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cell span {
+  font: 1rem var(--font-display);
+  letter-spacing: 0.06em;
+}
+
+.key {
+  position: relative;
+  width: 100%;
+  max-width: 78px;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 4px solid var(--ink);
+  border-radius: 50%;
+  background: var(--off);
+  box-shadow: 4px 4px 0 var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.08s, box-shadow 0.06s, transform 0.06s;
+}
+
+.key.r { --on: var(--red-on); --off: var(--red-off); }
+.key.b { --on: var(--blue-on); --off: var(--blue-off); }
+.key.g { --on: var(--green-on); --off: var(--green-off); }
+
+.key:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+.key[aria-pressed="true"] { background: var(--on); }
+.key.used { cursor: not-allowed; }
+.key.used:active { transform: none; box-shadow: 4px 4px 0 var(--ink); }
+
+.key.used::after {
+  content: "";
+  position: absolute;
+  left: -16%;
+  right: -16%;
+  top: 41%;
+  height: 18%;
+  background: var(--ink);
+}
+
+.key:focus-visible,
+.submit:focus-visible,
+.reset:focus-visible,
+.mute:focus-visible {
+  outline: 3px solid var(--red);
+  outline-offset: 3px;
+}
+
+.display {
+  min-height: 3.2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  background: var(--ink);
+  font-size: clamp(0.8rem, 3.9vw, 1rem);
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--muted);
+  cursor: default;
+}
+
+.message-tail { white-space: nowrap; }
+.display.notice { color: var(--paper); }
+.display.fail { color: #ff6a55; animation: buzz 0.28s linear; }
+
+.cleared .display {
+  color: #ff5a45;
+  font: 1.9rem var(--font-display);
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;
+}
+
+@keyframes buzz {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.submit,
+.reset {
+  font-family: var(--font-base);
+  font-weight: 900;
+  border: 3px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.submit { font-size: 1.15rem; letter-spacing: 0.3em; text-indent: 0.3em; padding: 13px; color: #ffffff; background: var(--red); }
+.reset { font-size: 0.95rem; letter-spacing: 0.15em; text-indent: 0.15em; padding: 11px; color: var(--ink); background: var(--paper); }
+.submit:active,
+.reset:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+
+.footer {
+  max-width: 440px;
+  margin: 26px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #5a554c;
+}
+
+.mute {
+  font: 900 0.8rem var(--font-base);
+  padding: 6px 12px;
+  color: var(--paper);
+  background: var(--ink);
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  cursor: pointer;
+}
+
+.mute[aria-pressed="false"] { color: var(--ink); background: var(--paper); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<main class="panel" id="panel">
+  <div class="plate">
+    <p>ボタンは全て点灯させること<span class="period">。</span></p>
+    <p>確認後、提出すること<span class="period">。</span></p>
+    <p>押し忘れに注意すること<span class="period">。</span></p>
+  </div>
+  <div class="board" id="board"></div>
+  <div class="display" id="display" role="status">
+    <div><span id="message"></span><span class="message-tail" id="message-tail" hidden><span id="tail-text">せん</span><span class="period">。</span></span></div>
+  </div>
+  <div class="controls">
+    <button type="button" class="submit" id="submit">提出</button>
+    <button type="button" class="reset" id="restart">最初から</button>
+  </div>
+</main>
+
+<footer class="footer">
+  <span>効果音: 効果音ラボ</span>
+  <button type="button" class="mute" id="mute" aria-pressed="true">音 ON</button>
+</footer>
+
+<script>
+const LAYOUT = "rrrbbbggg";
+const COLORS = { r: ["R", "赤"], b: ["B", "青"], g: ["G", "緑"] };
+const IDLE = "提出を待っています";
+const SEALED = "もう押せません";
+const NOT_READY = "全て点灯させてから押すこと";
+const FAIL_HEAD = "すべてのボタンが押されていま";
+const STEP = {
+  up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1],
+  downRight: [1, 1], upLeft: [-1, -1]
+};
+const TURNS = {
+  r: ["right", "left"],
+  b: ["downRight", "upLeft"],
+  g: ["up", "down"]
+};
+const PERIOD_TARGETS = [1, 6, 8, 7];
+const SOUNDS = {
+  key: "sounds/decision31.mp3",
+  lock: "sounds/iron-door-close1.mp3",
+  blocked: "sounds/beep1.mp3",
+  fail: "sounds/beep4.mp3",
+  clear: "sounds/shakin3.mp3"
+};
+
+let audio = null;
+let master = null;
+const buffers = {};
+const loading = {};
+let soundOn = true;
+try { soundOn = localStorage.getItem("pachipachi-sound-on") !== "off"; } catch (error) {}
+
+function audioContext() {
+  if (!audio) {
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) return null;
+    audio = new Context();
+    master = audio.createGain();
+    master.gain.value = 0.9;
+    master.connect(audio.destination);
+  }
+  if (audio.state === "suspended") audio.resume();
+  return audio;
+}
+
+function load(url) {
+  if (buffers[url]) return Promise.resolve(buffers[url]);
+  if (!loading[url]) {
+    const a = audioContext();
+    loading[url] = fetch(url)
+      .then(response => response.arrayBuffer())
+      .then(data => a.decodeAudioData(data))
+      .then(buffer => (buffers[url] = buffer));
+  }
+  return loading[url];
+}
+
+function play(id, rate = 1) {
+  if (!soundOn) return;
+  const a = audioContext();
+  if (!a) return;
+  load(SOUNDS[id]).then(buffer => {
+    const source = a.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = rate;
+    source.connect(master);
+    source.start();
+  }).catch(() => {});
+}
+
+addEventListener("pointerdown", () => {
+  if (audioContext()) Object.values(SOUNDS).forEach(url => load(url).catch(() => {}));
+}, { once: true });
+
+let board, awake, used, periodsLit, strict, cleared, failed, notice;
+
+const $ = id => document.getElementById(id);
+const panel = $("panel");
+const display = $("display");
+const message = $("message");
+const messageTail = $("message-tail");
+const tailText = $("tail-text");
+const submit = $("submit");
+const reset = $("restart");
+const periods = [...document.querySelectorAll(".period")];
+
+function neighbor(i, dir) {
+  const row = Math.floor(i / 3) + STEP[dir][0];
+  const col = i % 3 + STEP[dir][1];
+  return row >= 0 && row < 3 && col >= 0 && col < 3 ? row * 3 + col : -1;
+}
+
+function flip(i) {
+  if (i >= 0) board[i] = !board[i];
+}
+
+function flash(period) {
+  clearTimeout(period.flashTimer);
+  period.classList.add("flash");
+  period.flashTimer = setTimeout(() => period.classList.remove("flash"), 450);
+}
+
+const keys = [];
+for (let i = 0; i < 9; i++) {
+  const color = LAYOUT[i];
+  const number = i % 3 + 1;
+  const cell = document.createElement("div");
+  cell.className = "cell";
+  const key = document.createElement("button");
+  key.type = "button";
+  key.className = "key " + color;
+  key.setAttribute("aria-label", `${COLORS[color][1]} ${number}`);
+  key.addEventListener("click", () => {
+    if (cleared) return;
+    if (used[i]) {
+      play("blocked");
+      if (!isReady()) {
+        notice = SEALED;
+        render();
+      }
+      return;
+    }
+    const dir = TURNS[color][board[i] ? 1 : 0];
+    const target = neighbor(i, dir);
+    awake[Math.floor(i / 3)] = true;
+    flip(i);
+    if (target >= 0 && awake[Math.floor(target / 3)]) flip(target);
+    play("key", board[i] ? 1 : 0.85);
+    if (strict) {
+      used[i] = true;
+      setTimeout(() => play("lock"), 70);
+    }
+    failed = false;
+    notice = "";
+    render();
+  });
+  const label = document.createElement("span");
+  label.textContent = `${COLORS[color][0]}-${number}`;
+  cell.append(key, label);
+  $("board").append(cell);
+  keys.push(key);
+}
+
+periods.forEach((period, k) => {
+  period.addEventListener("click", () => {
+    if (cleared) return;
+    if (periodsLit[k]) {
+      flash(period);
+      return;
+    }
+    if (!board.every(Boolean)) {
+      flash(period);
+      notice = NOT_READY;
+      render();
+      return;
+    }
+    strict = true;
+    periodsLit[k] = true;
+    flip(PERIOD_TARGETS[k]);
+    if (k < 3) failed = false;
+    notice = "";
+    render();
+  });
+});
+
+function isReady() {
+  return board.every(Boolean) && periodsLit.every(Boolean);
+}
+
+function render() {
+  const ready = isReady();
+  if (ready) used.fill(true);
+  const showFail = !cleared && !ready && (failed || periodsLit[3]);
+  keys.forEach((key, i) => {
+    key.setAttribute("aria-pressed", String(board[i]));
+    key.classList.toggle("used", used[i]);
+    key.setAttribute("aria-disabled", String(used[i]));
+  });
+  periods.forEach((period, k) => period.classList.toggle("lit", periodsLit[k]));
+  panel.classList.toggle("cleared", cleared);
+  message.textContent = cleared ? "CLEAR" : notice || (showFail ? FAIL_HEAD : IDLE);
+  messageTail.hidden = cleared || (!showFail && !ready);
+  tailText.hidden = ready || Boolean(notice);
+  display.classList.toggle("fail", showFail && !notice);
+  display.classList.toggle("notice", (Boolean(notice) || ready) && !cleared);
+  submit.textContent = cleared ? "もう一度遊ぶ" : "提出";
+  reset.hidden = cleared;
+}
+
+function restart() {
+  board = Array(9).fill(false);
+  awake = [false, false, false];
+  used = Array(9).fill(false);
+  periodsLit = [false, false, false, false];
+  strict = false;
+  cleared = false;
+  failed = false;
+  notice = "";
+  render();
+}
+
+submit.addEventListener("click", () => {
+  if (cleared) return restart();
+  if (board.every(Boolean) && periodsLit.every(Boolean)) {
+    cleared = true;
+    play("clear");
+    return render();
+  }
+  failed = true;
+  notice = "";
+  play("fail");
+  display.classList.remove("fail");
+  void display.offsetWidth;
+  render();
+});
+
+reset.addEventListener("click", restart);
+
+restart();
+
+const muteButton = $("mute");
+function renderMute() {
+  muteButton.setAttribute("aria-pressed", String(soundOn));
+  muteButton.textContent = soundOn ? "音 ON" : "音 OFF";
+}
+muteButton.addEventListener("click", () => {
+  soundOn = !soundOn;
+  try { localStorage.setItem("pachipachi-sound-on", soundOn ? "on" : "off"); } catch (error) {}
+  renderMute();
+});
+renderMute();
+</script>
+</body>
+</html>

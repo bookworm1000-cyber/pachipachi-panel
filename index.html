@@ -192,7 +192,7 @@ body {
 
 .message-tail { white-space: nowrap; }
 .display.notice { color: var(--paper); }
-.display.fail { color: #ff6a55; animation: buzz 0.28s linear; }
+.display.fail { color: var(--paper); animation: buzz 0.28s linear; }
 
 .cleared .display {
   color: #ff5a45;
@@ -359,7 +359,9 @@ const SOUNDS = {
   lock: "sounds/iron-door-close1.mp3",
   blocked: "sounds/beep1.mp3",
   fail: "sounds/beep4.mp3",
-  clear: "sounds/shakin3.mp3"
+  clear: "sounds/shakin3.mp3",
+  undo: "sounds/cancel1.mp3",
+  reset: "sounds/cancel4.mp3"
 };
 
 let audio = null;
@@ -546,7 +548,10 @@ function restart() {
 }
 
 submit.addEventListener("click", () => {
-  if (cleared) return restart();
+  if (cleared) {
+    play("reset");
+    return restart();
+  }
   if (board.every(Boolean) && periodsLit.every(Boolean)) {
     cleared = true;
     play("clear");
@@ -560,11 +565,15 @@ submit.addEventListener("click", () => {
   render();
 });
 
-reset.addEventListener("click", restart);
+reset.addEventListener("click", () => {
+  play("reset");
+  restart();
+});
 
 undo.addEventListener("click", () => {
   if (cleared || history.length === 0) return;
   ({ board, used, periodsLit, strict } = history.pop());
+  play("undo");
   failed = false;
   notice = "";
   render();
